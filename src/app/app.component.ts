@@ -26,7 +26,7 @@ export class AppComponent {
 
         //leaflet.Icon.Default.imagePath = 'assets/img/theme/vendor/leaflet';
         this.map = L.map(el, {
-            center: [48.225897, 11.674274],
+            center: [48.225897, 11.674274], // TODO: via constructor
             zoom: 13,
             layers: this.layerGroups
         });
@@ -39,7 +39,6 @@ export class AppComponent {
 
         this.map.on('pm:create', (e) => {
             this.activeLayerGroup.addLayer(e.layer);
-            console.log("go");
         });
 
         // define toolbar options
@@ -71,6 +70,13 @@ export class AppComponent {
     }
 
     public addCircle() {
+        /*
+        let c1 = L.circle([48.225897, 11.674274], {radius: 200});
+        let gjson = c1.toGeoJSON();
+        gjson.properties.type = "circle";
+        gjson.properties.radius = c1.getRadius();
+        console.log(gjson);
+        */
         L.circle([48.225897, 11.674274], {radius: 200}).addTo(this.activeLayerGroup);
     }
 
