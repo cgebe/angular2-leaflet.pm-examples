@@ -17,26 +17,25 @@ export class AppComponent {
 
     constructor(private _elementRef: ElementRef) {
         this.layerGroups = [];
-        this.activeLayerGroup = L.layerGroup([]);
+        this.activeLayerGroup = L.featureGroup([]);
         this.layerGroups.push(this.activeLayerGroup);
     }
 
     ngAfterViewInit() {
         let el = this._elementRef.nativeElement.querySelector('.leaflet-maps');
 
-        //leaflet.Icon.Default.imagePath = 'assets/img/theme/vendor/leaflet';
         this.map = L.map(el, {
             center: [48.225897, 11.674274], // TODO: via constructor
             zoom: 13,
             layers: this.layerGroups
         });
 
+        // use openstreetmap tiles as map information
         L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a>'
         }).addTo(this.map);
 
-        //L.control.layers(this.layerGroups).addTo(this.map);
-
+        // add every newly created shape to the active layer
         this.map.on('pm:create', (e) => {
             this.activeLayerGroup.addLayer(e.layer);
         });
@@ -44,7 +43,7 @@ export class AppComponent {
         // define toolbar options
         var options = {
             position: 'topleft', // toolbar position, options are 'topleft', 'topright', 'bottomleft', 'bottomright'
-            drawMarker: true,  // adds button to draw markers
+            drawMarker: false,  // adds button to draw markers
             drawPolygon: true,  // adds button to draw a polygon
             drawPolyline: false,  // adds button to draw a polyline
             editPolygon: true,  // adds button to toggle global edit mode
@@ -53,36 +52,63 @@ export class AppComponent {
 
         // add leaflet.pm controls to the map
         this.map.pm.addControls(options);
-
-        /*
-        leaflet.marker([51.5, -0.09]).addTo(map)
-            .bindPopup('A pretty CSS3 popup.<br> Easily customizable.')
-            .openPopup();
-            */
-    }
-
-    public getShapesFromMap() {
-
     }
 
     public removeLayer() {
         this.map.removeLayer(this.activeLayerGroup);
     }
 
-    public addCircle() {
-        /*
-        let c1 = L.circle([48.225897, 11.674274], {radius: 200});
-        let gjson = c1.toGeoJSON();
-        gjson.properties.type = "circle";
-        gjson.properties.radius = c1.getRadius();
-        console.log(gjson);
-        */
-        L.circle([48.225897, 11.674274], {radius: 200}).addTo(this.activeLayerGroup);
+    /*
+    * This method is responsible for converting the shapes drawn to the map into GeoJson Data
+    * which state the geospatial permission settings for metadata object. Importat here is the
+    * parsing of circle, since GeoJson does not support circle shapes in its specification. We
+    * propose to add the radius of a circle to the properties field of the GeoJson feature
+    * object.
+    */
+    public toGeoJson() {
+        let geoJsonData = {
+            "type": "FeatureCollection",
+            "features": []
+        }
+        this.activeLayerGroup.getLayers().map(layer => {
+            if (layer instanceof L.Circle) {
+                let gjson = layer.toGeoJSON();
+                gjson.properties.radius = layer.getRadius(); // add radius of circle shape to the properties field
+                geoJsonData.features.push(gjson);
+            }
+            if (layer instanceof L.Polygon) {
+                let gjson = layer.toGeoJSON();
+                geoJsonData.features.push(gjson);
+            }
+        });
+        return geoJsonData;
     }
 
-    public addGeoJsonToMap(geoJsonData) {
-        const geoJsonLayer = L.geoJson(geoJsonData).addTo(this.map);
-        const bounds = geoJsonLayer.getBounds();
+    /*
+    * This method is reponsible for drawing GeoJson Data onto the map. The drawing of polygons
+    * is done by inversing the geojson coordinates and drawing the corresponding leaflet object.
+    * Circles are drawn on the basis of their radius and middle point. At the end the map adjusts
+    * itself to the boundary of the shapes.
+    */
+    public fromGeoJson(geoJsonData) {
+        geoJsonData.features.map(feature => {
+            if (feature.geometry.type == "Polygon") {
+                let points = [];
+                feature.geometry.coordinates[0].map(coordinate => {
+                    let point = [];
+                    // reverse geojson x,y to LatLng
+                    point.push(coordinate[1]);
+                    point.push(coordinate[0]);
+                    points.push(point);
+                })
+                L.polygon(points).addTo(this.activeLayerGroup);
+            }
+            if (feature.geometry.type == "Point" && feature.properties.radius != undefined) {
+                L.circle([feature.geometry.coordinates[1], feature.geometry.coordinates[0]], { radius: feature.properties.radius }).addTo(this.activeLayerGroup);
+            }
+        });
+        // adjust map
+        const bounds = this.activeLayerGroup.getBounds();
         this.map.fitBounds(bounds);
     }
 
@@ -116,9 +142,22 @@ export class AppComponent {
                             ]
                         ]
                     }
+                },
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "radius": 6000
+                    },
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            11.670211,
+                            48.220899
+                        ]
+                    }
                 }
             ]
         };
-        this.addGeoJsonToMap(geoJsonData);
+        this.fromGeoJson(geoJsonData);
     }
 }
